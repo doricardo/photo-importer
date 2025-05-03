@@ -1,32 +1,13 @@
-name: Build macOS App
-
-on:
-  push:
-    branches: [ master ]       # ou 'master' se for o seu caso
-
-jobs:
-  build-macos:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
+      # após gerar dist/photo_importer_app.app...
+      - name: Compactar .app em ZIP
         run: |
-          pip install --upgrade pip
-          pip install py2app PySide6 pillow opencv-python
+          ditto -c -k --keepParent dist/photo_importer_app.app PhotoImporter-macOS.zip
 
-      - name: Build .app
-        run: python setup.py py2app
-
-      - name: Upload macOS App artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: PhotoImporter-macOS
-          path: dist/photo_importer_app.app
+      - name: Criar Release e enviar ZIP
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ github.run_number }}" \
+            PhotoImporter-macOS.zip \
+            --title "PhotoImporter macOS build ${{ github.run_number }}" \
+            --notes "Build automática via Actions"
