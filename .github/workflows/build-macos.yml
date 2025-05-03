@@ -26,7 +26,7 @@ jobs:
         run: python setup.py py2app
 
       - name: Upload macOS App artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: PhotoImporter-macOS
           path: dist/photo_importer_app.app
