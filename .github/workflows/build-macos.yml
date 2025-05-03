@@ -1,5 +1,4 @@
 # .github/workflows/build-macos.yml
-
 name: Build macOS App
 
 on:
