@@ -3,9 +3,9 @@ name: Build macOS App
 # dispara em push na branch main (ou altere para a sua branch)
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   build-macos:
