@@ -4,7 +4,7 @@ name: Build macOS App
 on:
   push:
     branches:
-      - main    # ou 'master' se a sua branch principal se chamar master
+      - master    # ou 'master' se a sua branch principal se chamar master
 
 jobs:
   build-macos:
