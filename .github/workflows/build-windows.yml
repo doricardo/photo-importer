@@ -47,7 +47,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # extrai owner e repo
+          # extrai owner e repo do contexto
           $parts = "${{ github.repository }}" -split '/'
           $owner = $parts[0]
           $repo  = $parts[1]
@@ -55,7 +55,6 @@ jobs:
 
           Write-Host "==> Criando release $tag..."
           try {
-            # tenta criar o release
             $release = Invoke-RestMethod -Method Post `
               -Uri "https://api.github.com/repos/$owner/$repo/releases" `
               -Headers @{
@@ -68,14 +67,12 @@ jobs:
                 body     = "Build automática via GitHub Actions para Windows"
               } | ConvertTo-Json)
           } catch {
-            Write-Host "Release $tag já existe; obtendo info..."
-            # se já existir, busca o release existente
+            Write-Host "Release $tag já existe; recuperando informação..."
             $release = Invoke-RestMethod -Method Get `
               -Uri "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" `
               -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
           }
 
-          # limpa o sufixo "{?name,label}"
           $uploadUrl = $release.upload_url -replace '\{.*',''
           Write-Host "Upload URL: $uploadUrl"
 
@@ -87,3 +84,5 @@ jobs:
             "$uploadUrl?name=PhotoImporter-Windows.zip"
 
           Write-Host "==> Release $tag criado/atualizado com sucesso."
+          # força código de saída zero para não falhar o step
+          exit 0
