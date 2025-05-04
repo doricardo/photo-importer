@@ -8,7 +8,7 @@ on:
       - master    # ou sua branch principal
 
 permissions:
-  contents: write   # habilita escrita de releases/assets
+  contents: write   # permite criar releases e fazer upload de assets
 
 jobs:
   build-windows:
@@ -49,8 +49,9 @@ jobs:
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ github.run_number }}
           release_name: v${{ github.run_number }}
           body: Build automática via GitHub Actions para Windows
@@ -59,8 +60,9 @@ jobs:
 
       - name: Upload ZIP as release asset
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: PhotoImporter-Windows.zip
           asset_name: PhotoImporter-Windows.zip
