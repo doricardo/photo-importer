@@ -11,6 +11,11 @@ jobs:
   build-windows:
     runs-on: windows-latest
 
+    # executa todos os run steps em PowerShell
+    defaults:
+      run:
+        shell: pwsh
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -26,7 +31,6 @@ jobs:
           pip install pyinstaller PySide6 pillow opencv-python
 
       - name: Build standalone EXE (sem ícone)
-        shell: pwsh
         run: |
           pyinstaller `
             --noconfirm `
@@ -37,34 +41,45 @@ jobs:
             photo_importer_app.py
 
       - name: Compress EXE to ZIP
-        shell: pwsh
         run: |
           Compress-Archive -Path dist\photo_importer_app.exe -DestinationPath PhotoImporter-Windows.zip
 
       - name: Publish GitHub Release with asset
-        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Extrai OWNER e REPO
+          # Extrai owner e repo
           $parts = "${{ github.repository }}" -split '/'
           $owner = $parts[0]
           $repo  = $parts[1]
           $tag   = "v${{ github.run_number }}"
 
-          Write-Host "Creating release $tag..."
-          $body = @{ tag_name = $tag; name = $tag; body = "Build automática via GitHub Actions para Windows" } | ConvertTo-Json
+          Write-Host "==> Criando release $tag..."
+          $body = @{
+            tag_name = $tag
+            name     = $tag
+            body     = "Build automática via GitHub Actions para Windows"
+          } | ConvertTo-Json
+
+          # Cria o release
           $release = Invoke-RestMethod -Method Post `
             -Uri "https://api.github.com/repos/$owner/$repo/releases" `
-            -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; "Content-Type" = "application/json" } `
-            -Body $body
+            -Headers @{
+              Authorization  = "Bearer $env:GITHUB_TOKEN"
+              "Content-Type" = "application/json"
+            } -Body $body
 
-          $uploadUrl = $release.upload_url -split '\{' | Select-Object -First 1
+          # Remove o "{?name,label}" da URL de upload
+          $uploadUrl = $release.upload_url -replace '\{.*',''
+          Write-Host "Upload URL: $uploadUrl"
 
-          Write-Host "Uploading PhotoImporter-Windows.zip..."
+          Write-Host "==> Enviando PhotoImporter-Windows.zip..."
           Invoke-RestMethod -Method Post `
             -Uri "$uploadUrl?name=PhotoImporter-Windows.zip" `
-            -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; "Content-Type" = "application/zip" } `
+            -Headers @{
+              Authorization  = "Bearer $env:GITHUB_TOKEN"
+              "Content-Type" = "application/zip"
+            } `
             -InFile "PhotoImporter-Windows.zip"
 
-          Write-Host "Release $tag criado com sucesso."
+          Write-Host "==> Release $tag criado e ZIP enviado."
