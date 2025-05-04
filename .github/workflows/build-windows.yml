@@ -24,15 +24,8 @@ jobs:
           pip install pyinstaller PySide6 pillow opencv-python
 
       - name: Build standalone EXE
-        run: |
-          pyinstaller ^
-            --noconfirm ^
-            --clean ^
-            --onefile ^
-            --windowed ^
-            --add-data "models;models" ^
-            --icon icon.ico ^
-            photo_importer_app.py
+        shell: cmd
+        run: pyinstaller --noconfirm --clean --onefile --windowed --add-data "models;models" --icon icon.ico photo_importer_app.py
 
       - name: Package into ZIP
         run: |
