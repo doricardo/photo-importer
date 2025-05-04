@@ -5,13 +5,12 @@ name: Build Windows App
 on:
   push:
     branches:
-      - master    # ou sua branch principal
+      - master    # substitua pela sua branch principal, se não for "master"
 
 jobs:
   build-windows:
     runs-on: windows-latest
 
-    # executa todos os run steps em PowerShell
     defaults:
       run:
         shell: pwsh
@@ -48,20 +47,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Extrai owner e repo
+          # extrai owner e repo do contexto
           $parts = "${{ github.repository }}" -split '/'
           $owner = $parts[0]
           $repo  = $parts[1]
           $tag   = "v${{ github.run_number }}"
 
           Write-Host "==> Criando release $tag..."
-          $body = @{
-            tag_name = $tag
-            name     = $tag
-            body     = "Build automática via GitHub Actions para Windows"
-          } | ConvertTo-Json
+          $body = @{ tag_name = $tag; name = $tag; body = "Build automática via GitHub Actions para Windows" } | ConvertTo-Json
 
-          # Cria o release
           $release = Invoke-RestMethod -Method Post `
             -Uri "https://api.github.com/repos/$owner/$repo/releases" `
             -Headers @{
@@ -69,17 +63,15 @@ jobs:
               "Content-Type" = "application/json"
             } -Body $body
 
-          # Remove o "{?name,label}" da URL de upload
+          # remove o sufixo "{?name,label}" da upload_url
           $uploadUrl = $release.upload_url -replace '\{.*',''
           Write-Host "Upload URL: $uploadUrl"
 
-          Write-Host "==> Enviando PhotoImporter-Windows.zip..."
-          Invoke-RestMethod -Method Post `
-            -Uri "$uploadUrl?name=PhotoImporter-Windows.zip" `
-            -Headers @{
-              Authorization  = "Bearer $env:GITHUB_TOKEN"
-              "Content-Type" = "application/zip"
-            } `
-            -InFile "PhotoImporter-Windows.zip"
+          Write-Host "==> Enviando PhotoImporter-Windows.zip via curl.exe..."
+          curl.exe -s -X POST `
+            -H "Authorization: Bearer $env:GITHUB_TOKEN" `
+            -H "Content-Type: application/zip" `
+            --data-binary @PhotoImporter-Windows.zip `
+            "$uploadUrl?name=PhotoImporter-Windows.zip"
 
-          Write-Host "==> Release $tag criado e ZIP enviado."
+          Write-Host "==> Release $tag criado e asset enviado."
