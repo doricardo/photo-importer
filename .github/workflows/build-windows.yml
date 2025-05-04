@@ -2,6 +2,10 @@
 
 name: Build Windows App
 
+# 1) Dá permissão de escrita em conteúdo para o GITHUB_TOKEN
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -16,19 +20,23 @@ jobs:
         shell: pwsh
 
     steps:
+      # 2) Faz checkout do código
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # 3) Configura o Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
+      # 4) Instala dependências
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6 pillow opencv-python
 
+      # 5) Empacota o EXE com PyInstaller
       - name: Build standalone EXE (sem ícone)
         run: |
           pyinstaller `
@@ -39,50 +47,26 @@ jobs:
             --add-data "models;models" `
             photo_importer_app.py
 
+      # 6) Compacta num ZIP
       - name: Compress EXE to ZIP
         run: |
           Compress-Archive -Path dist\photo_importer_app.exe -DestinationPath PhotoImporter-Windows.zip
 
-      - name: Publish GitHub Release with asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # extrai owner e repo do contexto
-          $parts = "${{ github.repository }}" -split '/'
-          $owner = $parts[0]
-          $repo  = $parts[1]
-          $tag   = "v${{ github.run_number }}"
+      # 7) Cria a GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          # tag e nome baseado no número da execução
+          tag_name: v${{ github.run_number }}
+          release_name: v${{ github.run_number }}
+          body: Build automática via GitHub Actions para Windows
 
-          Write-Host "==> Criando release $tag..."
-          try {
-            $release = Invoke-RestMethod -Method Post `
-              -Uri "https://api.github.com/repos/$owner/$repo/releases" `
-              -Headers @{
-                Authorization = "Bearer $env:GITHUB_TOKEN"
-                "Content-Type" = "application/json"
-              } `
-              -Body (@{
-                tag_name = $tag
-                name     = $tag
-                body     = "Build automática via GitHub Actions para Windows"
-              } | ConvertTo-Json)
-          } catch {
-            Write-Host "Release $tag já existe; recuperando informação..."
-            $release = Invoke-RestMethod -Method Get `
-              -Uri "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" `
-              -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
-          }
-
-          $uploadUrl = $release.upload_url -replace '\{.*',''
-          Write-Host "Upload URL: $uploadUrl"
-
-          Write-Host "==> Enviando PhotoImporter-Windows.zip..."
-          curl.exe -s -X POST `
-            -H "Authorization: Bearer $env:GITHUB_TOKEN" `
-            -H "Content-Type: application/zip" `
-            --data-binary @PhotoImporter-Windows.zip `
-            "$uploadUrl?name=PhotoImporter-Windows.zip"
-
-          Write-Host "==> Release $tag criado/atualizado com sucesso."
-          # força código de saída zero para não falhar o step
-          exit 0
+      # 8) Carrega o ZIP como asset
+      - name: Upload ZIP as release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: PhotoImporter-Windows.zip
+          asset_name: PhotoImporter-Windows.zip
+          asset_content_type: application/zip
