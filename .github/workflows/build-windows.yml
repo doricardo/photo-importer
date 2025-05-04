@@ -5,7 +5,7 @@ name: Build Windows App
 on:
   push:
     branches:
-      - master    # substitua pela sua branch principal, se não for "master"
+      - master    # ou sua branch principal
 
 jobs:
   build-windows:
@@ -47,31 +47,43 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # extrai owner e repo do contexto
+          # extrai owner e repo
           $parts = "${{ github.repository }}" -split '/'
           $owner = $parts[0]
           $repo  = $parts[1]
           $tag   = "v${{ github.run_number }}"
 
           Write-Host "==> Criando release $tag..."
-          $body = @{ tag_name = $tag; name = $tag; body = "Build automática via GitHub Actions para Windows" } | ConvertTo-Json
+          try {
+            # tenta criar o release
+            $release = Invoke-RestMethod -Method Post `
+              -Uri "https://api.github.com/repos/$owner/$repo/releases" `
+              -Headers @{
+                Authorization = "Bearer $env:GITHUB_TOKEN"
+                "Content-Type" = "application/json"
+              } `
+              -Body (@{
+                tag_name = $tag
+                name     = $tag
+                body     = "Build automática via GitHub Actions para Windows"
+              } | ConvertTo-Json)
+          } catch {
+            Write-Host "Release $tag já existe; obtendo info..."
+            # se já existir, busca o release existente
+            $release = Invoke-RestMethod -Method Get `
+              -Uri "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" `
+              -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
+          }
 
-          $release = Invoke-RestMethod -Method Post `
-            -Uri "https://api.github.com/repos/$owner/$repo/releases" `
-            -Headers @{
-              Authorization  = "Bearer $env:GITHUB_TOKEN"
-              "Content-Type" = "application/json"
-            } -Body $body
-
-          # remove o sufixo "{?name,label}" da upload_url
+          # limpa o sufixo "{?name,label}"
           $uploadUrl = $release.upload_url -replace '\{.*',''
           Write-Host "Upload URL: $uploadUrl"
 
-          Write-Host "==> Enviando PhotoImporter-Windows.zip via curl.exe..."
+          Write-Host "==> Enviando PhotoImporter-Windows.zip..."
           curl.exe -s -X POST `
             -H "Authorization: Bearer $env:GITHUB_TOKEN" `
             -H "Content-Type: application/zip" `
             --data-binary @PhotoImporter-Windows.zip `
             "$uploadUrl?name=PhotoImporter-Windows.zip"
 
-          Write-Host "==> Release $tag criado e asset enviado."
+          Write-Host "==> Release $tag criado/atualizado com sucesso."
