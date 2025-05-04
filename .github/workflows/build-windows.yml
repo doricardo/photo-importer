@@ -1,3 +1,5 @@
+# .github/workflows/build-windows.yml
+
 name: Build Windows App
 
 on:
@@ -23,25 +25,46 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6 pillow opencv-python
 
-      - name: Build standalone EXE
-        shell: cmd
-        run: pyinstaller --noconfirm --clean --onefile --windowed --add-data "models;models" --icon icon.ico photo_importer_app.py
-
-      - name: Package into ZIP
+      - name: Build standalone EXE (sem ícone)
+        shell: pwsh
         run: |
-          powershell -Command "Compress-Archive -Path dist\photo_importer_app.exe -DestinationPath PhotoImporter-Windows.zip"
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --windowed `
+            --add-data "models;models" `
+            photo_importer_app.py
 
-      - name: Verify GitHub CLI
-        run: gh --version
+      - name: Compress EXE to ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\photo_importer_app.exe -DestinationPath PhotoImporter-Windows.zip
 
-      - name: Create GitHub Release
+      - name: Publish GitHub Release with asset
+        shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # define tag baseado no número de execução
-          TAG="v${{ github.run_number }}"
-          echo "Criando release $TAG..."
-          gh release create "$TAG" \
-            PhotoImporter-Windows.zip \
-            --title "PhotoImporter Windows build #${{ github.run_number }}" \
-            --notes "Build automática via GitHub Actions para Windows"
+          # Extrai OWNER e REPO
+          $parts = "${{ github.repository }}" -split '/'
+          $owner = $parts[0]
+          $repo  = $parts[1]
+          $tag   = "v${{ github.run_number }}"
+
+          Write-Host "Creating release $tag..."
+          $body = @{ tag_name = $tag; name = $tag; body = "Build automática via GitHub Actions para Windows" } | ConvertTo-Json
+          $release = Invoke-RestMethod -Method Post `
+            -Uri "https://api.github.com/repos/$owner/$repo/releases" `
+            -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; "Content-Type" = "application/json" } `
+            -Body $body
+
+          $uploadUrl = $release.upload_url -split '\{' | Select-Object -First 1
+
+          Write-Host "Uploading PhotoImporter-Windows.zip..."
+          Invoke-RestMethod -Method Post `
+            -Uri "$uploadUrl?name=PhotoImporter-Windows.zip" `
+            -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; "Content-Type" = "application/zip" } `
+            -InFile "PhotoImporter-Windows.zip"
+
+          Write-Host "Release $tag criado com sucesso."
