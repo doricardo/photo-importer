@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master    # ou sua branch principal
-
 jobs:
   build-windows:
     runs-on: windows-latest
