@@ -8,15 +8,19 @@ from pathlib import Path
 from datetime import datetime
 from PIL import Image, ImageEnhance, ImageFilter
 import cv2
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
     QSlider, QCheckBox, QProgressBar, QFileDialog, QDialog,
     QDialogButtonBox, QGridLayout, QSizePolicy, QSpacerItem,
-    QGroupBox, QMessageBox
+    QGroupBox, QMessageBox, QSplashScreen
 )
 from PySide6.QtCore import Qt, QObject, Signal, QThread, QTimer
-from PySide6.QtGui import QPixmap, QIcon, QImageReader, QImage, QPalette, QColor, QFont
+from PySide6.QtGui import QPixmap, QIcon, QPalette, QColor, QFont, QPainter
+
+__version__ = '1.0'
+APP_NAME = 'Photo Importer'
 
 # -- DNN face model setup
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
@@ -84,7 +88,6 @@ class HelpDialog(QDialog):
             self.sliders[name.lower()] = slider
         layout.addLayout(grid)
 
-        # Previews placeholders
         h = QHBoxLayout()
         self.preview_orig = QLabel("—", alignment=Qt.AlignCenter)
         self.preview_mod  = QLabel("—", alignment=Qt.AlignCenter)
@@ -98,7 +101,7 @@ class HelpDialog(QDialog):
         layout.addWidget(btns)
 
     def update_preview(self):
-        # sem exemplo estático, apenas mostro sliders em ação em preview vazio
+        # Placeholder: implementar preview com PIL
         pass
 
 class ImportWorker(QObject):
@@ -146,10 +149,8 @@ class ImportWorker(QObject):
 
             no_face = False
             if self.verify_face and img_bgr is not None:
-                blob = cv2.dnn.blobFromImage(
-                    img_bgr, 1.0, (300, 300),
-                    [104.0, 177.0, 123.0], False, False
-                )
+                blob = cv2.dnn.blobFromImage(img_bgr, 1.0, (300, 300),
+                                             [104.0, 177.0, 123.0], False, False)
                 net.setInput(blob)
                 det = net.forward()
                 faces = []
@@ -164,9 +165,8 @@ class ImportWorker(QObject):
                         faces.append((x1,y1,x2-x1,y2-y1))
                 no_face = len(faces) == 0
 
-            # condição corrigida
             if (gray is not None and blur_var < self.latency) or no_face:
-                reason = 'desfocada' if (gray is not None and blur_var < self.latency) else 'sem rosto'
+                reason = 'desfocada' if gray is not None and blur_var < self.latency else 'sem rosto'
                 dstp = os.path.join(remove_dir, name)
                 shutil.copy2(path, dstp)
                 records.append([
@@ -222,7 +222,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(icon_path))
 
         self.last_dest = os.path.expanduser("~")
-        self.setWindowTitle("Importador de Fotos")
+        self.setWindowTitle(APP_NAME)
         self.resize(820,700)
         self.setFont(QFont('Segoe UI',11))
 
@@ -233,38 +233,22 @@ class MainWindow(QMainWindow):
         # CONTROLES
         self.src_combo = QComboBox(); self.populate_drives()
         btn_refresh   = QPushButton("Atualizar"); btn_refresh.clicked.connect(self.populate_drives)
-
-        self.dst_edit = QLineEdit(); self.dst_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        btn_browse   = QPushButton("Selecionar…"); btn_browse.clicked.connect(self.choose_destination)
+        self.dst_edit  = QLineEdit(); self.dst_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        btn_browse    = QPushButton("Selecionar…"); btn_browse.clicked.connect(self.choose_destination)
 
         self.mode_combo = QComboBox(); self.mode_combo.addItems(["Todas","Lote"])
         self.mode_combo.currentTextChanged.connect(self.on_mode_change)
         self.lbl_batch  = QLabel("Imagens por lote:")
         self.spin_batch = QSpinBox(); self.spin_batch.setRange(1,10000); self.spin_batch.setValue(1000)
 
-        # parâmetros de detecção
         self.spin_latency   = QSpinBox(); self.spin_latency.setRange(0,500); self.spin_latency.setValue(100)
         self.chk_v          = QCheckBox("Verificar Face"); self.chk_v.setChecked(True)
         self.chk_v.toggled.connect(self.on_verify_face_toggle)
 
-        # valores default ajustados conforme solicitado:
-        self.spin_scale     = QDoubleSpinBox()
-        self.spin_scale.setRange(0.1, 3.0)
-        self.spin_scale.setSingleStep(0.01)
-        self.spin_scale.setValue(1.01)       # DEFAULT escala 1.01
-
-        self.spin_neighbors = QSpinBox()
-        self.spin_neighbors.setRange(1, 20)
-        self.spin_neighbors.setValue(1)      # DEFAULT vizinhos 1
-
-        self.spin_min_size  = QSpinBox()
-        self.spin_min_size.setRange(10, 500)
-        self.spin_min_size.setValue(10)      # DEFAULT min face 10
-
-        self.spin_conf      = QDoubleSpinBox()
-        self.spin_conf.setRange(0.0, 1.0)
-        self.spin_conf.setSingleStep(0.01)
-        self.spin_conf.setValue(0.10)        # DEFAULT confiança 0.10
+        self.spin_scale     = QDoubleSpinBox(); self.spin_scale.setRange(0.1,3.0); self.spin_scale.setSingleStep(0.01); self.spin_scale.setValue(1.01)
+        self.spin_neighbors = QSpinBox(); self.spin_neighbors.setRange(1,20); self.spin_neighbors.setValue(1)
+        self.spin_min_size  = QSpinBox(); self.spin_min_size.setRange(10,500); self.spin_min_size.setValue(10)
+        self.spin_conf      = QDoubleSpinBox(); self.spin_conf.setRange(0.0,1.0); self.spin_conf.setSingleStep(0.01); self.spin_conf.setValue(0.10)
 
         central     = QWidget()
         main_layout = QVBoxLayout(central)
@@ -332,12 +316,6 @@ class MainWindow(QMainWindow):
         for w in (self.spin_scale, self.spin_neighbors, self.spin_min_size, self.spin_conf):
             w.setEnabled(checked)
 
-    def closeEvent(self, event):
-        th = getattr(self, 'worker_thread', None)
-        if th and th.isRunning():
-            th.quit(); th.wait()
-        event.accept()
-
     def populate_drives(self):
         self.src_combo.clear()
         if sys.platform.startswith('win'):
@@ -372,9 +350,9 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setWindowTitle("Confirmar Importação")
         msg.setText(f"Confirma a importação de {total} imagens?")
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        yes_btn = msg.button(QMessageBox.Yes); yes_btn.setText("Sim")
-        no_btn  = msg.button(QMessageBox.No);  no_btn.setText("Não")
+        msg.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+        msg.button(QMessageBox.Yes).setText("Sim")
+        msg.button(QMessageBox.No).setText("Não")
         if msg.exec() != QMessageBox.Yes:
             return
 
@@ -384,12 +362,9 @@ class MainWindow(QMainWindow):
         if dst == src:
             self.status_label.setText("Destino deve ser diferente da fonte"); return
 
-        old = getattr(self, 'worker_thread', None)
-        if old:
-            try:
-                if old.isRunning(): old.quit(); old.wait()
-            except RuntimeError: pass
-            self.worker_thread = None
+        old = getattr(self,'worker_thread',None)
+        if old and old.isRunning():
+            old.quit(); old.wait()
 
         self.start_time = datetime.now()
         self.timer.start()
@@ -397,7 +372,7 @@ class MainWindow(QMainWindow):
         self.pb.setMaximum(total); self.pb.setValue(0)
 
         self.worker = ImportWorker(
-            src, dst,
+            src,dst,
             "All" if self.mode_combo.currentText()=="Todas" else "Batch",
             self.spin_batch.value(),
             self.chk_v.isChecked(),
@@ -417,7 +392,7 @@ class MainWindow(QMainWindow):
         self.worker.progress.connect(self.pb.setValue)
         self.worker.status.connect(self.status_label.setText)
         self.worker.total_copies.connect(lambda x: self.copy_info.setText(f"Copiadas: {x}"))
-        self.worker.batch_copies.connect(lambda b, c: self.copy_info.setText(f"Lote {b}: {c} copiadas"))
+        self.worker.batch_copies.connect(lambda b,c: self.copy_info.setText(f"Lote {b}: {c} copiadas"))
         self.worker.finished.connect(self.timer.stop)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
@@ -428,26 +403,54 @@ class MainWindow(QMainWindow):
 
     def update_elapsed(self):
         delta = datetime.now() - self.start_time
-        h, rem = divmod(delta.seconds, 3600)
-        m, s = divmod(rem, 60)
+        h, rem = divmod(delta.seconds,3600)
+        m, s  = divmod(rem,60)
         self.time_label.setText(f"Tempo decorrido: {h:02d}:{m:02d}:{s:02d}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    icon_path = os.path.join(os.path.dirname(__file__), 'icon.png')
-    app.setWindowIcon(QIcon(icon_path))
 
-    pal = QPalette()
-    pal.setColor(QPalette.Window, QColor(240,240,240))
-    pal.setColor(QPalette.WindowText, Qt.black)
-    pal.setColor(QPalette.Base, QColor(255,255,255))
-    pal.setColor(QPalette.AlternateBase, QColor(230,230,230))
-    pal.setColor(QPalette.Button, QColor(225,225,225))
-    pal.setColor(QPalette.ButtonText, Qt.black)
-    pal.setColor(QPalette.Highlight, QColor(42,130,218))
-    pal.setColor(QPalette.HighlightedText, Qt.white)
-    app.setPalette(pal)
+    # --- Splash Screen com título e versão + contagem regressiva de 5s ---
+    splash_path = os.path.join(os.path.dirname(__file__),'splash.png')
+    if os.path.exists(splash_path):
+        pix = QPixmap(splash_path)
+    else:
+        pix = QPixmap(600,400)
+        pix.fill(QColor(50,50,50))
+
+    # desenha título e versão centralizados, com versão descida
+    painter = QPainter(pix)
+    painter.setPen(Qt.white)
+    title_font = QFont('Segoe UI',32,QFont.Bold)
+    painter.setFont(title_font)
+    painter.drawText(pix.rect(), Qt.AlignCenter, APP_NAME)
+    ver_font = QFont('Segoe UI',14)
+    painter.setFont(ver_font)
+    # versão fica 80px abaixo do topo
+    painter.drawText(pix.rect().adjusted(0,80,0,0), Qt.AlignCenter, f'Versão {__version__}')
+    painter.end()
+
+    splash = QSplashScreen(pix, Qt.WindowStaysOnTopHint)
+    splash.show()
+    app.processEvents()
 
     window = MainWindow()
-    window.show()
+    remaining = {'sec': 5}
+    align = Qt.AlignBottom | Qt.AlignHCenter
+
+    def tick():
+        sec = remaining['sec']
+        splash.showMessage(f"Iniciando em {sec}...", align, QColor(255,255,255))
+        app.processEvents()
+        remaining['sec'] -= 1
+        if remaining['sec'] < 0:
+            timer.stop()
+            splash.close()
+            window.show()
+
+    timer = QTimer()
+    timer.timeout.connect(tick)
+    timer.start(1000)
+    QTimer.singleShot(0, tick)
+
     sys.exit(app.exec())
