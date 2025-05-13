@@ -67,6 +67,6 @@ photo-importer/
    python photo_importer_app.py
 
 4. (Opcional) Crie o bundle:
-
-macOS: python setup.py py2app
-Windows: pyinstaller --onefile --windowed --add-data "models;models" --icon icon.ico photo_importer_app.py
+   macOS: python setup.py py2app
+   
+   Windows: pyinstaller --onefile --windowed --add-data "models;models" --icon icon.ico photo_importer_app.py
