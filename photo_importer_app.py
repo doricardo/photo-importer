@@ -340,6 +340,10 @@ class MainWindow(QMainWindow):
 
     def start_import(self):
         src = self.src_combo.currentData()
+        if not src or not os.path.exists(src):
+            self.status_label.setText("Fonte inválida ou não selecionada")
+            return
+
         images = [str(p) for p in Path(src).rglob('*')
                   if p.suffix.lower() in {'.jpg','.jpeg','.png','.bmp','.tif','.tiff'}]
         total = len(images)
